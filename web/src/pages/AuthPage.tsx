@@ -42,7 +42,7 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
           </h2>
           <p className="mt-2 text-sm text-gray-400">
             {mode === "login"
-              ? "Welcome back. Pick up where your recordings left off."
+              ? "Same email and password as v8.bdcb-tasks."
               : "Set up your host account and start recording."}
           </p>
         </div>
