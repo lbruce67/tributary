@@ -1,0 +1,20 @@
+# Tributary: API, WebSocket and the built web app on one port.
+# Installed by scripts/deploy-vm.sh. Settings live in /etc/tributary/tributary.env.
+[Unit]
+Description=Tributary recording studio
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__DIR__
+Environment=NODE_ENV=production
+Environment=PORT=4100
+EnvironmentFile=-/etc/tributary/tributary.env
+ExecStart=/usr/bin/env node server/dist/index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
