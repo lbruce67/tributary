@@ -23,6 +23,26 @@ export function verifyPassword(password: string, stored: string): boolean {
   );
 }
 
+const handoffs = new Map<string, { token: string; expires: number }>();
+
+/** One-time code that trades a v8 identity for a Tributary session cookie. */
+export function issueV8Handoff(userId: string): string {
+  const now = Date.now();
+  for (const [code, row] of handoffs) {
+    if (row.expires <= now) handoffs.delete(code);
+  }
+  const code = newToken();
+  handoffs.set(code, { token: createAuthToken(userId), expires: now + 60_000 });
+  return code;
+}
+
+export function consumeV8Handoff(code: string): string | null {
+  const row = handoffs.get(code);
+  handoffs.delete(code);
+  if (!row || row.expires <= Date.now()) return null;
+  return row.token;
+}
+
 export function createAuthToken(userId: string): string {
   const token = newToken();
   const now = Date.now();
@@ -32,11 +52,12 @@ export function createAuthToken(userId: string): string {
   return token;
 }
 
-export function setSessionCookie(reply: FastifyReply, token: string): void {
+export function setSessionCookie(reply: FastifyReply, token: string, opts?: { secure?: boolean }): void {
   reply.setCookie(SESSION_COOKIE, token, {
     path: "/",
     httpOnly: true,
     sameSite: "lax",
+    secure: opts?.secure ?? false,
     maxAge: SESSION_TTL_MS / 1000,
   });
 }
