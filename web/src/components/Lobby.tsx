@@ -31,6 +31,7 @@ export function Lobby({
   const [recordWav, setRecordWav] = useState(true);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [missingDevice, setMissingDevice] = useState<string | null>(null);
   const [micLevel, setMicLevel] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -51,17 +52,29 @@ export function Lobby({
       streamRef.current?.getTracks().forEach((t) => t.stop());
       setPermissionError(null);
       try {
-        let media: MediaStream;
-        try {
-          media = await navigator.mediaDevices.getUserMedia(buildConstraints(settings));
-        } catch (err) {
-          // A saved device id or a strict audio mode can miss the built-in hardware.
-          if (!(err instanceof DOMException) || (err.name !== "NotFoundError" && err.name !== "OverconstrainedError")) throw err;
-          media = await navigator.mediaDevices.getUserMedia({
-            video: settings.preset === "audio" ? false : true,
-            audio: true,
-          });
+        // Try the full request first, then plain defaults, then whichever single device exists.
+        // A computer with no camera (or no microphone) fails the combined request outright with
+        // "Requested device not found", which would otherwise hide the device that IS there.
+        const wantVideo = settings.preset !== "audio";
+        const attempts: { constraints: MediaStreamConstraints; missing: string | null }[] = [
+          { constraints: buildConstraints(settings), missing: null },
+          { constraints: { video: wantVideo, audio: true }, missing: null },
+          ...(wantVideo ? [{ constraints: { video: false, audio: true }, missing: "camera" }] : []),
+          ...(wantVideo ? [{ constraints: { video: true, audio: false }, missing: "microphone" }] : []),
+        ];
+        let media: MediaStream | null = null;
+        let lastError: unknown = null;
+        for (const attempt of attempts) {
+          try {
+            media = await navigator.mediaDevices.getUserMedia(attempt.constraints);
+            if (!cancelled) setMissingDevice(attempt.missing);
+            break;
+          } catch (err) {
+            lastError = err;
+            if (!(err instanceof DOMException) || (err.name !== "NotFoundError" && err.name !== "OverconstrainedError")) throw err;
+          }
         }
+        if (!media) throw lastError;
         if (cancelled) {
           media.getTracks().forEach((t) => t.stop());
           return;
@@ -80,7 +93,9 @@ export function Lobby({
           setPermissionError(
             err instanceof DOMException && err.name === "NotAllowedError"
               ? "Camera/microphone permission was denied. Allow access in your browser's site settings, then reload."
-              : `Could not access devices: ${err instanceof Error ? err.message : String(err)}`
+              : err instanceof DOMException && err.name === "NotFoundError"
+                ? "This computer has no camera or microphone the browser can see. Connect one (a USB webcam, or an iPhone as a Continuity Camera on a Mac), check that the browser is allowed under the system's Camera and Microphone privacy settings, then reload."
+                : `Could not access devices: ${err instanceof Error ? err.message : String(err)}`
           );
         }
       }
@@ -122,7 +137,7 @@ export function Lobby({
             <video ref={videoRef} autoPlay playsInline muted className="h-full w-full scale-x-[-1] object-cover" />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-gray-500">
-              {permissionError ? "No camera" : preset === "audio" ? "Audio-only mode" : "Starting camera…"}
+              {permissionError || missingDevice === "camera" ? "No camera" : preset === "audio" ? "Audio-only mode" : "Starting camera…"}
             </div>
           )}
           <div className="absolute bottom-2 left-2 right-2 h-1.5 overflow-hidden rounded bg-black/40">
@@ -132,6 +147,13 @@ export function Lobby({
             />
           </div>
         </div>
+        {!permissionError && missingDevice && (
+          <p className="mt-3 rounded-2xl bg-white/5 p-3 text-sm ring-1 ring-white/20" role="status">
+            {missingDevice === "camera"
+              ? "No camera was found, so this take will be audio only. To record video (and get an MP4), connect a camera and reload."
+              : "No microphone was found, so this take will have no sound. Connect a microphone and reload."}
+          </p>
+        )}
         {permissionError && (
           <p className="mt-3 rounded-2xl bg-rec/10 p-3 text-sm text-rec ring-1 ring-rec/40">{permissionError}</p>
         )}
