@@ -38,18 +38,20 @@ export function buildConstraints(settings: CaptureSettings): MediaStreamConstrai
     settings.preset === "audio"
       ? false
       : {
-          ...(settings.cameraId ? { deviceId: { exact: settings.cameraId } } : {}),
+          ...(settings.cameraId ? { deviceId: { ideal: settings.cameraId } } : {}),
           width: { ideal: dims.width },
           height: { ideal: dims.height },
           frameRate: { ideal: 30 },
         };
+  // ideal, not exact: a bare channelCount of 2 makes Chrome reject a mono Mac mic
+  // with "Requested device not found", which hides the camera too.
   const audio: MediaTrackConstraints = {
-    ...(settings.microphoneId ? { deviceId: { exact: settings.microphoneId } } : {}),
-    echoCancellation: settings.echoCancellation,
-    noiseSuppression: settings.echoCancellation,
-    autoGainControl: true,
-    sampleRate: 48000,
-    channelCount: 2,
+    ...(settings.microphoneId ? { deviceId: { ideal: settings.microphoneId } } : {}),
+    echoCancellation: { ideal: settings.echoCancellation },
+    noiseSuppression: { ideal: settings.echoCancellation },
+    autoGainControl: { ideal: true },
+    sampleRate: { ideal: 48000 },
+    channelCount: { ideal: 2 },
   };
   return { video, audio };
 }

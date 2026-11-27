@@ -51,7 +51,17 @@ export function Lobby({
       streamRef.current?.getTracks().forEach((t) => t.stop());
       setPermissionError(null);
       try {
-        const media = await navigator.mediaDevices.getUserMedia(buildConstraints(settings));
+        let media: MediaStream;
+        try {
+          media = await navigator.mediaDevices.getUserMedia(buildConstraints(settings));
+        } catch (err) {
+          // A saved device id or a strict audio mode can miss the built-in hardware.
+          if (!(err instanceof DOMException) || (err.name !== "NotFoundError" && err.name !== "OverconstrainedError")) throw err;
+          media = await navigator.mediaDevices.getUserMedia({
+            video: settings.preset === "audio" ? false : true,
+            audio: true,
+          });
+        }
         if (cancelled) {
           media.getTracks().forEach((t) => t.stop());
           return;
